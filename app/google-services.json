@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "496151959855",
+    "project_id": "gptnix-390f1",
+    "storage_bucket": "gptnix-390f1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:496151959855:android:6cbecd61dd01b2e369a9da",
+        "android_client_info": {
+          "package_name": "com.nextgptapp.here"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "496151959855-feo7h8lij4g2avc7lfhqc7sn9l3m8h1g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nextgptapp.here",
+            "certificate_hash": "970108173dd293c19023e9d8ff51cef8ba090088"
+          }
+        },
+        {
+          "client_id": "496151959855-ra3uff8goif66b8l4lvn1d1jgusjfonn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBIZuuSZtZquhoh2OYZljTcWLy-mnN8nhE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "496151959855-ra3uff8goif66b8l4lvn1d1jgusjfonn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
