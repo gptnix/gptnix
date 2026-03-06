@@ -167,6 +167,8 @@ class _TimelineBuilder {
 
     bool effectiveShowEphemeral = showEphemeral;
 
+    debugPrint('[EPHEM-GATE] showEphemeral=$showEphemeral, effectiveShowEphemeral=$effectiveShowEphemeral, hint=$activeStreamFinalMessageIdHint');
+
     if (effectiveShowEphemeral && activeStreamFinalMessageIdHint != null) {
       final exists = sorted.any((d) => d.id == activeStreamFinalMessageIdHint);
       if (exists) effectiveShowEphemeral = false;
@@ -491,6 +493,9 @@ class _GptnixChatMessageListState extends State<GptnixChatMessageList> {
   }
 
   Widget _buildEphemeralItem(ChatMessageVM vm) {
+    debugPrint('[EPHEM-DEBUG] _buildEphemeralItem called, '
+        'listenableNull=${widget.ephemeralTextListenable == null}, '
+        'fromTextNull=${widget.buildEphemeralMessageFromText == null}');
     Widget inner;
 
     if (widget.ephemeralTextListenable != null &&
@@ -498,10 +503,14 @@ class _GptnixChatMessageListState extends State<GptnixChatMessageList> {
       inner = ValueListenableBuilder<String>(
         valueListenable: widget.ephemeralTextListenable!,
         builder: (context, text, _) {
+          debugPrint('[VLB-DEBUG] builder called, text.length=${text.length}');
           return widget.buildEphemeralMessageFromText!(text);
         },
       );
     } else {
+      debugPrint('[EPHEM-DEBUG] ELSE branch taken — VLB skipped! '
+          'listenableNull=${widget.ephemeralTextListenable == null}, '
+          'fromTextNull=${widget.buildEphemeralMessageFromText == null}');
       inner = widget.buildEphemeralMessage();
     }
 

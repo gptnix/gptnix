@@ -68,8 +68,19 @@ class GptnixRichContent extends StatelessWidget {
 
     final dark = isDark ?? (Theme.of(context).brightness == Brightness.dark);
 
-    final splitKey = _cacheKeyFor(raw);
-    final blocks = _splitCache[splitKey] ??= _splitBlocksFailSafe(raw);
+    // P1-B: fastMode (streaming) skips cache entirely — each token is a new string
+    // and caching would grow the static map by hundreds of entries per response.
+    // Full mode uses a bounded cache (cleared when it exceeds 150 entries).
+    final List<_Block> blocks;
+    final String splitKey;
+    if (fastMode) {
+      blocks = _splitBlocksFailSafe(raw);
+      splitKey = '';
+    } else {
+      if (_splitCache.length > 150) _splitCache.clear();
+      splitKey = _cacheKeyFor(raw);
+      blocks = _splitCache[splitKey] ??= _splitBlocksFailSafe(raw);
+    }
 
     if (blocks.isEmpty) return const SizedBox.shrink();
 
@@ -97,6 +108,7 @@ class GptnixRichContent extends StatelessWidget {
                 code: blocks[i].content,
                 language: blocks[i].lang,
                 isDark: dark,
+                isStreaming: blocks[i].isStreaming,
                 surface2: surface2,
                 border: border,
                 textColor: textColor,
@@ -114,11 +126,12 @@ class GptnixRichContent extends StatelessWidget {
         fastMode ? _preprocessFast(mdText) : _preprocessForChatGptLook(mdText);
 
     if (fastMode) {
-      // FAST: bez linkify-a (jeftinije + bez re-layout trzanja)
+      // FAST: no linkify (cheaper + avoids re-layout jank during streaming)
       return pre;
     }
 
-    // FULL: linkify cache
+    // FULL: bounded linkify cache
+    if (_linkifyCache.length > 150) _linkifyCache.clear();
     final key = '$splitKey|${pre.hashCode}:${pre.length}';
     return _linkifyCache[key] ??= _autoLinkifyMdSafe(pre);
   }
@@ -130,7 +143,11 @@ class _Block {
   final _BlockKind kind;
   final String content;
   final String? lang;
-  const _Block(this.kind, this.content, {this.lang});
+  /// true when the opening ``` fence was seen but the closing ``` has not
+  /// arrived yet — used during streaming to show a live code block without
+  /// the copy/collapse header.
+  final bool isStreaming;
+  const _Block(this.kind, this.content, {this.lang, this.isStreaming = false});
 }
 
 List<_Block> _splitBlocksFailSafe(String input) {
@@ -141,7 +158,39 @@ List<_Block> _splitBlocksFailSafe(String input) {
   if (firstFence != -1) {
     final secondFence = text.indexOf('```', firstFence + 3);
     if (secondFence == -1) {
-      return [_Block(_BlockKind.md, text.trimRight())];
+      // Opening fence found but closing fence has not arrived yet.
+      // Split into: [md text before fence] + [streaming code block].
+      // This prevents raw backticks from appearing as plain paragraph text.
+      final newlineAfterFence = text.indexOf('\n', firstFence);
+      if (newlineAfterFence == -1) {
+        // Only the fence line itself (e.g. "```dart") — no code body yet.
+        // Render everything before the fence as markdown; skip the bare fence.
+        final before = text.substring(0, firstFence).trimRight();
+        final blocks = <_Block>[];
+        if (before.trim().isNotEmpty) {
+          blocks.add(_Block(_BlockKind.md, before));
+        }
+        // Emit an empty streaming code block so the container appears immediately
+        final openLine = text.substring(firstFence);
+        final lang = openLine.replaceAll('`', '').trim();
+        blocks.add(_Block(_BlockKind.code, '',
+            lang: lang.isEmpty ? null : lang, isStreaming: true));
+        return blocks;
+      }
+
+      final before = text.substring(0, firstFence).trimRight();
+      // Parse language from the opening fence line (e.g. "```dart")
+      final openLine =
+          text.substring(firstFence, newlineAfterFence).replaceAll('`', '').trim();
+      final codeContent = text.substring(newlineAfterFence + 1).trimRight();
+
+      final blocks = <_Block>[];
+      if (before.trim().isNotEmpty) {
+        blocks.add(_Block(_BlockKind.md, before));
+      }
+      blocks.add(_Block(_BlockKind.code, codeContent,
+          lang: openLine.isEmpty ? null : openLine, isStreaming: true));
+      return blocks;
     }
   }
 
@@ -224,6 +273,7 @@ String _autoPromoteHeadings(String input) {
     return false;
   }
 
+  // Only ALL-CAPS lines qualify (every letter must be uppercase, min 4 letters)
   bool looksAllCaps(String line) {
     final t = line.trim();
     if (t.length < 4) return false;
@@ -231,9 +281,6 @@ String _autoPromoteHeadings(String input) {
     final letters = t.replaceAll(RegExp(r'[^A-ZŠĐČĆŽ]'), '');
     return letters.length >= 4;
   }
-
-  bool endsSentence(String t) =>
-      t.endsWith('.') || t.endsWith('!') || t.endsWith('?');
 
   for (int i = 0; i < lines.length; i++) {
     final line = lines[i];
@@ -245,11 +292,13 @@ String _autoPromoteHeadings(String input) {
       continue;
     }
 
+    // Never touch lines that are already structural markdown
     if (isStructural(t)) {
       out.add(t);
       continue;
     }
 
+    // Never touch setext-style underlines
     if (i + 1 < lines.length) {
       final next = lines[i + 1].trim();
       if (RegExp(r'^[-=]{3,}$').hasMatch(next)) {
@@ -259,42 +308,20 @@ String _autoPromoteHeadings(String input) {
     }
 
     final core = tl.trim();
-    final shortEnough = core.length <= 60;
-    final hasColonEnd = core.endsWith(':') && core.length <= 70;
-    final caps = looksAllCaps(core);
 
-    if (endsSentence(core)) {
-      out.add(t);
-      continue;
-    }
-
-    if (RegExp(r',').allMatches(core).length >= 2) {
-      out.add(t);
-      continue;
-    }
-
-    if (!shortEnough && !hasColonEnd) {
-      out.add(t);
-      continue;
-    }
-
-    if (hasColonEnd) {
+    // Case 1: line ends with ':' → promote to ### (strip the colon)
+    if (core.endsWith(':') && core.length <= 80) {
       out.add('### ${core.substring(0, core.length - 1)}');
       continue;
     }
 
-    if (caps && shortEnough) {
+    // Case 2: ALL-CAPS line → promote to ##
+    if (looksAllCaps(core)) {
       out.add('## $core');
       continue;
     }
 
-    final nextIsBlank =
-        (i + 1 < lines.length) ? lines[i + 1].trim().isEmpty : true;
-    if (shortEnough && nextIsBlank) {
-      out.add('## $core');
-      continue;
-    }
-
+    // All other lines: pass through unchanged
     out.add(t);
   }
 
@@ -480,21 +507,22 @@ class _MarkdownChunk extends StatelessWidget {
   final Color? subtext;
   final Color? muted;
 
-  Color _cText() =>
-      textColor ?? (isDark ? const Color(0xFFE5E7EB) : const Color(0xFF0F172A));
-  Color _cSub() =>
-      subtext ?? (isDark ? const Color(0xFF94A3B8) : const Color(0xFF6B7280));
-  Color _cMuted() =>
-      muted ?? (isDark ? const Color(0xFF64748B) : const Color(0xFF9CA3AF));
-  Color _cBorder() =>
-      border ?? (isDark ? const Color(0xFF233044) : const Color(0xFFE5E7EB));
-  Color _cSurface2() =>
-      surface2 ?? (isDark ? const Color(0xFF0B1224) : const Color(0xFFF8FAFC));
+  // P3-B: FlutterFlowTheme as default fallback — color overrides still respected
+  Color _cText(BuildContext context) =>
+      textColor ?? FlutterFlowTheme.of(context).primaryText;
+  Color _cSub(BuildContext context) =>
+      subtext ?? FlutterFlowTheme.of(context).secondaryText;
+  Color _cMuted(BuildContext context) =>
+      muted ?? FlutterFlowTheme.of(context).secondaryText;
+  Color _cBorder(BuildContext context) =>
+      border ?? FlutterFlowTheme.of(context).alternate;
+  Color _cSurface2(BuildContext context) =>
+      surface2 ?? FlutterFlowTheme.of(context).secondaryBackground;
 
   MarkdownStyleSheet _style(BuildContext context) {
-    final tc = _cText();
-    final br = _cBorder();
-    final s2 = _cSurface2();
+    final tc = _cText(context);
+    final br = _cBorder(context);
+    final s2 = _cSurface2(context);
     final base = MarkdownStyleSheet.fromTheme(Theme.of(context));
 
     return base.copyWith(
@@ -564,6 +592,24 @@ class _MarkdownChunk extends StatelessWidget {
       horizontalRuleDecoration: BoxDecoration(
         border: Border(top: BorderSide(color: br.withOpacity(0.95), width: 1)),
       ),
+      // P2-B: table styling
+      tableBorder: TableBorder.all(
+        color: isDark ? Colors.white24 : Colors.black12,
+        width: 1,
+      ),
+      tableHead: TextStyle(
+        fontWeight: FontWeight.w600,
+        fontSize: 14,
+        color: tc,
+      ),
+      tableBody: TextStyle(
+        fontSize: 14,
+        height: 1.45,
+        color: tc,
+      ),
+      tableCellsPadding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      tableColumnWidth: const FlexColumnWidth(),
       blockSpacing: 12,
     );
   }
@@ -600,6 +646,7 @@ class _MarkdownChunk extends StatelessWidget {
   }
 
   void _openImage(BuildContext context, String url) {
+    final theme = FlutterFlowTheme.of(context);
     Navigator.of(context).push(
       MaterialPageRoute(
         fullscreenDialog: true,
@@ -609,11 +656,11 @@ class _MarkdownChunk extends StatelessWidget {
           imageFile: null,
           isDark: isDark,
           surface: surface ?? Colors.transparent,
-          surface2: surface2 ?? Colors.transparent,
-          text: textColor ?? Colors.white,
-          subtext: subtext ?? Colors.white70,
-          muted: muted ?? Colors.white60,
-          border: border ?? Colors.white24,
+          surface2: surface2 ?? theme.secondaryBackground,
+          text: textColor ?? theme.primaryText,
+          subtext: subtext ?? theme.secondaryText,
+          muted: muted ?? theme.secondaryText,
+          border: border ?? theme.alternate,
         ),
       ),
     );
@@ -658,11 +705,11 @@ class _MarkdownChunk extends StatelessWidget {
                     fit: BoxFit.cover,
                     gaplessPlayback: true,
                     errorBuilder: (_, __, ___) => Container(
-                      color: _cSurface2(),
+                      color: _cSurface2(context),
                       alignment: Alignment.center,
                       child: Icon(
                         Icons.broken_image_rounded,
-                        color: _cMuted(),
+                        color: _cMuted(context),
                         size: 26,
                       ),
                     ),
@@ -677,12 +724,13 @@ class _MarkdownChunk extends StatelessWidget {
   }
 }
 
-// ---------------- Code chunk (unchanged) ----------------
+// ---------------- Code chunk ----------------
 class _CodeChunk extends StatefulWidget {
   const _CodeChunk({
     required this.code,
     this.language,
     required this.isDark,
+    this.isStreaming = false,
     this.surface2,
     this.border,
     this.textColor,
@@ -692,6 +740,9 @@ class _CodeChunk extends StatefulWidget {
   final String code;
   final String? language;
   final bool isDark;
+  /// When true the closing ``` has not arrived yet — suppresses copy button
+  /// and collapse toggle since the block is still being written.
+  final bool isStreaming;
 
   final Color? surface2;
   final Color? border;
@@ -705,29 +756,52 @@ class _CodeChunk extends StatefulWidget {
 class _CodeChunkState extends State<_CodeChunk> {
   bool _expanded = true;
 
-  Color _cText() =>
-      widget.textColor ??
-      (widget.isDark ? const Color(0xFFE5E7EB) : const Color(0xFF0F172A));
-  Color _cMuted() =>
-      widget.muted ??
-      (widget.isDark ? const Color(0xFF64748B) : const Color(0xFF9CA3AF));
-  Color _cBorder() =>
-      widget.border ??
-      (widget.isDark ? const Color(0xFF233044) : const Color(0xFFE5E7EB));
-  Color _cSurface2() =>
-      widget.surface2 ??
-      (widget.isDark ? const Color(0xFF0B1224) : const Color(0xFFF8FAFC));
+  // P3-B: FlutterFlowTheme as default — overrides still respected
+  Color _cText(BuildContext ctx) =>
+      widget.textColor ?? FlutterFlowTheme.of(ctx).primaryText;
+  Color _cMuted(BuildContext ctx) =>
+      widget.muted ?? FlutterFlowTheme.of(ctx).secondaryText;
+  Color _cBorder(BuildContext ctx) =>
+      widget.border ?? FlutterFlowTheme.of(ctx).alternate;
+  Color _cSurface2(BuildContext ctx) =>
+      widget.surface2 ?? FlutterFlowTheme.of(ctx).secondaryBackground;
 
   @override
   Widget build(BuildContext context) {
     final lang = (widget.language ?? '').trim();
-    final header = Row(
+
+    // Streaming header: language label only — no copy or collapse until complete
+    final streamingHeader = Row(
       children: [
         Text(
           lang.isEmpty ? 'code' : lang,
           style: TextStyle(
             fontSize: 12.5,
-            color: _cMuted(),
+            color: _cMuted(context),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const Spacer(),
+        // Subtle "writing…" label so the user knows more tokens are coming
+        Text(
+          'writing…',
+          style: TextStyle(
+            fontSize: 11,
+            color: _cMuted(context).withOpacity(0.6),
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ],
+    );
+
+    // Complete header: language label + collapse toggle + copy button
+    final completeHeader = Row(
+      children: [
+        Text(
+          lang.isEmpty ? 'code' : lang,
+          style: TextStyle(
+            fontSize: 12.5,
+            color: _cMuted(context),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -740,7 +814,7 @@ class _CodeChunkState extends State<_CodeChunk> {
           icon: Icon(
             _expanded ? Icons.expand_less : Icons.expand_more,
             size: 18,
-            color: _cMuted(),
+            color: _cMuted(context),
           ),
         ),
         IconButton(
@@ -757,31 +831,38 @@ class _CodeChunkState extends State<_CodeChunk> {
                   duration: Duration(milliseconds: 850)),
             );
           },
-          icon: Icon(Icons.copy_rounded, size: 18, color: _cMuted()),
+          icon: Icon(Icons.copy_rounded, size: 18, color: _cMuted(context)),
         ),
       ],
     );
 
+    // During streaming we always show the content (never collapsed)
+    final showContent = widget.isStreaming || _expanded;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: _cSurface2(),
+        color: _cSurface2(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _cBorder(), width: 1),
+        border: Border.all(color: _cBorder(context), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          header,
-          if (_expanded) ...[
+          widget.isStreaming ? streamingHeader : completeHeader,
+          if (showContent && widget.code.isNotEmpty) ...[
             const SizedBox(height: 8),
-            SelectableText(
-              widget.code,
-              style: TextStyle(
-                fontFamily: 'RobotoMono',
-                fontSize: 13.5,
-                height: 1.45,
-                color: _cText(),
+            // P2-A: horizontal scroll so long lines don't wrap inside code blocks
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SelectableText(
+                widget.code,
+                style: TextStyle(
+                  fontFamily: 'RobotoMono',
+                  fontSize: 13.5,
+                  height: 1.45,
+                  color: _cText(context),
+                ),
               ),
             ),
           ],

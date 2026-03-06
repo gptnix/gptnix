@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 // Begin custom widget code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import 'package:flutter_markdown/flutter_markdown.dart';
+
 class GptnixExpandableReasoning extends StatefulWidget {
   const GptnixExpandableReasoning({
     super.key,
@@ -49,6 +51,13 @@ class GptnixExpandableReasoning extends StatefulWidget {
 
 class _GptnixExpandableReasoningState extends State<GptnixExpandableReasoning> {
   bool _expanded = false;
+
+  /// MarkdownBody does not support maxLines — truncate to N lines manually.
+  String _truncateLines(String text, int maxLines) {
+    final lines = text.split('\n');
+    if (lines.length <= maxLines) return text;
+    return '${lines.take(maxLines).join('\n')}…';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,19 +121,42 @@ class _GptnixExpandableReasoningState extends State<GptnixExpandableReasoning> {
                 ],
               ),
               const SizedBox(height: 6),
+              // P3-C: MarkdownBody for bold/italic/inline-code in reasoning text
               AnimatedSize(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOut,
-                child: Text(
-                  t,
-                  maxLines: _expanded ? null : widget.collapsedLines,
-                  overflow:
-                      _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.35,
-                    fontStyle: FontStyle.italic,
-                    color: fg.withOpacity(dark ? 0.88 : 0.86),
+                child: MarkdownBody(
+                  data: _expanded
+                      ? t
+                      : _truncateLines(t, widget.collapsedLines),
+                  selectable: true,
+                  softLineBreak: true,
+                  styleSheet: MarkdownStyleSheet(
+                    p: TextStyle(
+                      fontSize: 12.5,
+                      height: 1.38,
+                      fontStyle: FontStyle.italic,
+                      color: fg.withOpacity(dark ? 0.88 : 0.86),
+                    ),
+                    strong: TextStyle(
+                      fontSize: 12.5,
+                      height: 1.38,
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.w700,
+                      color: fg,
+                    ),
+                    em: TextStyle(
+                      fontSize: 12.5,
+                      height: 1.38,
+                      fontStyle: FontStyle.italic,
+                      color: fg.withOpacity(dark ? 0.88 : 0.86),
+                    ),
+                    code: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12.0,
+                      color: fg,
+                      backgroundColor: br.withOpacity(0.25),
+                    ),
                   ),
                 ),
               ),

@@ -13,6 +13,7 @@
 function safeFlush(res) {
   try {
     if (typeof res.flush === 'function') res.flush();
+    if (res.socket) res.socket.setNoDelay(true);
   } catch (_) {}
 }
 
@@ -45,6 +46,7 @@ function setupSSE(res, { timeoutMs = 240000 } = {}) {
       if (res.writableEnded || res.destroyed) return;
       const out = JSON.stringify({ type, ...payload });
       res.write(`data: ${out}\n\n`);
+      if (res.socket) res.socket.setNoDelay(true);
       safeFlush(res);
     } catch (_) {}
   };

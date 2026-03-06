@@ -536,7 +536,18 @@ class _GptnixSseChatState extends State<GptnixSseChat> {
       _savedAssistantThisTurn = true;
       _lastSavedAssistantText = text;
       await _loadMessages();
-      await _viewport.scrollToBottom(force: true, animated: true);
+      if (!_viewport.userHasScrolledAway) {
+        _viewport.setAutoFollow(true);
+        final sc = _viewport.scrollController;
+        if (sc.hasClients) {
+          final distanceFromBottom =
+              sc.position.maxScrollExtent - sc.position.pixels;
+          if (distanceFromBottom > 80) {
+            await _viewport.scrollToBottom(force: false, animated: true);
+          }
+          // Within 80px — autoFollow handles the last pixels naturally
+        }
+      }
     } catch (_) {}
   }
 
@@ -660,8 +671,11 @@ class _GptnixSseChatState extends State<GptnixSseChat> {
     _webSources.clear();
     _generatedImages.clear();
 
-    _activeStream?.dispose();
-    _activeStream = ValueNotifier<String>('');
+    if (_activeStream == null) {
+      _activeStream = ValueNotifier<String>('');
+    } else {
+      _activeStream!.value = '';
+    }
 
     _unlockStreamPin();
 
@@ -754,6 +768,7 @@ class _GptnixSseChatState extends State<GptnixSseChat> {
   }
 
   void _flushTokenBuffer() {
+    debugPrint('[STREAM-DEBUG] flush: buf=${_tokenBuf.toString().length} chars, activeStream=${_activeStream?.value.length ?? 0} chars');
     if (!mounted) return;
     final chunk = _tokenBuf.toString();
     if (chunk.isEmpty) return;
@@ -776,6 +791,7 @@ class _GptnixSseChatState extends State<GptnixSseChat> {
   }
 
   void _onSseToken(String token) {
+    debugPrint('[STREAM-DEBUG] token received: ${token.length} chars, showEphemeral=$_showEphemeral, isStreaming=$_isStreaming');
     if (!mounted) return;
     _tokenBuf.write(token);
     _scheduleTokenFlush();
@@ -784,9 +800,11 @@ class _GptnixSseChatState extends State<GptnixSseChat> {
   void _onSseJson(Map<String, dynamic> json) {
     if (!mounted) return;
     final type = (json['type'] ?? '').toString();
-    if (type == 'token') _onSseToken((json['content'] ?? '').toString());
+    if (type == 'token')
+      _onSseToken((json['content'] ?? json['text'] ?? '').toString());
     if (type == 'done') {
-      _doneMessageCandidate = (json['message'] ?? '').toString();
+      _doneMessageCandidate =
+          (json['message'] ?? json['text'] ?? '').toString();
       _flushTokenBufferNow();
     }
     if (type == 'tool_status') _pushToolStatus(json);
@@ -804,6 +822,7 @@ class _GptnixSseChatState extends State<GptnixSseChat> {
   }
 
   void _onSseDone() {
+    debugPrint('[STREAM-DEBUG] DONE received, finalText length=${_doneMessageCandidate.length}');
     _finalizeAndCloseStream(userStopped: false);
   }
 
@@ -911,7 +930,6 @@ class _GptnixSseChatState extends State<GptnixSseChat> {
         : _ephemeralMinHeight;
 
     return Padding(
-      key: _ephemeralKey,
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1110,8 +1128,7 @@ class _GptnixSseChatState extends State<GptnixSseChat> {
                             buildMessageItem: _buildMessageItem,
                             bottomPadding: inputBarH + 20,
                             viewportController: _viewport,
-                            activeStreamFinalMessageIdHint:
-                                _ephemeralAfterUserId,
+                            activeStreamFinalMessageIdHint: null,
                           );
                         },
                       ),

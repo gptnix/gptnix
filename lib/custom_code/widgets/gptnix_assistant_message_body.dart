@@ -75,17 +75,20 @@ class GptnixAssistantMessageBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = isDark;
+    final theme = FlutterFlowTheme.of(context);
 
     final text = rawText;
 
     final maxW = width ?? MediaQuery.of(context).size.width;
     final contentMax = math.min(740.0, maxW - 24);
 
-    final bubbleColor = dark ? const Color(0xFF1F1F1F) : Colors.white;
-    final borderColor =
-        dark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06);
+    // P3-A: use FlutterFlowTheme tokens instead of hardcoded Colors
+    final bubbleColor = theme.secondaryBackground;
+    final borderColor = theme.alternate.withOpacity(0.3);
 
-    final textColor = dark ? Colors.white : Colors.black87;
+    // textColor kept for GptnixRichContent's own theming (passed as isDark)
+    // but kept here for any remaining legacy references
+    final textColor = theme.primaryText;
 
     Widget content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -117,13 +120,14 @@ class GptnixAssistantMessageBody extends StatelessWidget {
         if (isTyping && text.isEmpty)
           const _TypingDots()
         else
-          SelectableText(
-            text,
-            style: TextStyle(
-              color: textColor,
-              fontSize: 15,
-              height: 1.35,
-            ),
+          // P1-A: render with full markdown support via GptnixRichContent.
+          // fastMode=true during streaming (isTyping) skips expensive
+          // linkify + heading-promotion to avoid layout jank per token.
+          GptnixRichContent(
+            text: text,
+            isDark: dark,
+            fastMode: isTyping,
+            selectable: true,
           ),
       ],
     );
@@ -149,12 +153,11 @@ class GptnixAssistantMessageBody extends StatelessWidget {
           child: avatar ??
               CircleAvatar(
                 radius: 14,
-                backgroundColor:
-                    dark ? Colors.white.withOpacity(0.14) : Colors.black12,
+                backgroundColor: theme.alternate.withOpacity(0.4),
                 child: Icon(
                   Icons.auto_awesome,
                   size: 16,
-                  color: dark ? Colors.white70 : Colors.black54,
+                  color: theme.secondaryText,
                 ),
               ),
         ),
@@ -183,7 +186,7 @@ class GptnixAssistantMessageBody extends StatelessWidget {
               child: Icon(
                 Icons.copy_rounded,
                 size: 18,
-                color: dark ? Colors.white60 : Colors.black45,
+                color: theme.secondaryText,
               ),
             ),
           ),

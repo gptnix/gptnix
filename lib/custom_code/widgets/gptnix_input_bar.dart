@@ -14,33 +14,25 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 
 /// ─────────────────────────────────────────────────────────────────────────
-/// GptnixInputBar — premium redesign (FF-friendly param types)
+/// GptnixInputBar — themed, production-grade chat input bar
 ///
-/// ✅ FIX: FlutterFlow ne može procesirati TextEditingController/FocusNode kao parametre
-///    → koristimo dynamic i interno castamo.
-///
-/// ✅ FIX: FlutterFlow ne može procesirati callback tipa Future<void> Function(int)
-///    → koristimo dynamic i interno zovemo s index argumentom.
-///
-/// Layout:
-///   [file strip — optional, visible when files selected]
-///   ┌─────────────────────────────────────────────────────┐  ← floating card
-///   │  Napiši poruku…  (auto-grow 1–5 lines)              │
-///   ├─────────────────────────────────────────────────────│  ← hairline
-///   │  [+ Attach]  [⚡ Think chip]  ·  [🎤]  [▲ Send]    │
-///   └─────────────────────────────────────────────────────┘
+/// All colors sourced from FlutterFlowTheme tokens — works in dark AND light.
+/// No hardcoded Color() values except intentional icon colors (_AttachSheet).
 /// ─────────────────────────────────────────────────────────────────────────
 
 // Debug flag — flip to true locally to inspect keyboard padding values
 const bool _kbDebug = false;
+
+// ── Dimension tokens (no color constants — all colors via FlutterFlowTheme) ─
+const double kInputBarRadius = 28.0;
+const double kSendBtnSize = 40.0;
+const double kActionBtnSize = 36.0;
 
 class GptnixInputBar extends StatefulWidget {
   const GptnixInputBar({
     super.key,
     this.width,
     this.height,
-
-    // ✅ FF-friendly: dynamic (umjesto TextEditingController/FocusNode)
     required this.controller,
     required this.focusNode,
     required this.isStreaming,
@@ -49,16 +41,12 @@ class GptnixInputBar extends StatefulWidget {
     required this.pickedFiles,
     required this.pickedExts,
     required this.isDark,
-
-    // FF-safe callbacks (dynamic)
     required this.onSend,
     required this.onStop,
     required this.onVoiceChat,
     required this.onPickCamera,
     required this.onPickGallery,
     required this.onPickDocuments,
-
-    // ✅ FF-friendly: dynamic (umjesto Future<void> Function(int))
     required this.onRemoveFile,
     required this.onToggleDeepThink,
   });
@@ -66,16 +54,17 @@ class GptnixInputBar extends StatefulWidget {
   final double? width;
   final double? height;
 
-  /// ✅ dynamic (FF)
+  /// ✅ FF-friendly dynamic (FlutterFlow cannot serialize TextEditingController)
   final dynamic controller;
   final dynamic focusNode;
 
   final bool isStreaming;
   final bool isSending;
   final bool deepThink;
-
   final List<FFUploadedFile> pickedFiles;
   final List<String> pickedExts;
+
+  /// Kept for API compatibility — theming now uses FlutterFlowTheme.of(context)
   final bool isDark;
 
   final dynamic onSend;
@@ -85,9 +74,8 @@ class GptnixInputBar extends StatefulWidget {
   final dynamic onPickGallery;
   final dynamic onPickDocuments;
 
-  /// ✅ dynamic (FF)
+  /// ✅ FF-friendly dynamic (FlutterFlow cannot serialize Future<void> Function(int))
   final dynamic onRemoveFile;
-
   final dynamic onToggleDeepThink;
 
   @override
@@ -95,9 +83,7 @@ class GptnixInputBar extends StatefulWidget {
 }
 
 class _GptnixInputBarState extends State<GptnixInputBar> {
-  // Rebuild SAMO send gumb kad se canSend mijenja — ne cijeli input bar
   late final ValueNotifier<bool> _canSend;
-
   bool _hasFocus = false;
 
   TextEditingController? get _ctrl {
@@ -115,10 +101,7 @@ class _GptnixInputBarState extends State<GptnixInputBar> {
   @override
   void initState() {
     super.initState();
-
     _canSend = ValueNotifier(_computeCanSend());
-
-    // Listeneri samo ako je stvarni controller/focus došao
     _ctrl?.addListener(_onTextChanged);
     _focus?.addListener(_onFocusChange);
   }
@@ -127,7 +110,6 @@ class _GptnixInputBarState extends State<GptnixInputBar> {
   void didUpdateWidget(covariant GptnixInputBar old) {
     super.didUpdateWidget(old);
 
-    // Ako se controller/focus promijenio, rebindi
     if (old.controller != widget.controller) {
       final oldCtrl = (old.controller is TextEditingController)
           ? old.controller as TextEditingController
@@ -144,7 +126,6 @@ class _GptnixInputBarState extends State<GptnixInputBar> {
       _focus?.addListener(_onFocusChange);
     }
 
-    // Ažuriraj canSend kad se streaming/sending ili broj fajlova promijeni
     if (old.isStreaming != widget.isStreaming ||
         old.isSending != widget.isSending ||
         old.pickedFiles.length != widget.pickedFiles.length) {
@@ -191,7 +172,6 @@ class _GptnixInputBarState extends State<GptnixInputBar> {
   Future<void> _safeCallWithIndex(dynamic cb, int index) async {
     if (cb == null) return;
     try {
-      // pokušaj standardno: Function(int)
       if (cb is Function) {
         final r = Function.apply(cb, [index]);
         if (r is Future) await r.catchError((_) {});
@@ -199,6 +179,7 @@ class _GptnixInputBarState extends State<GptnixInputBar> {
     } catch (_) {}
   }
 
+  // FIX-02 #5: Enter = send, Shift+Enter = new line (desktop/tablet)
   KeyEventResult _handleKey(FocusNode node, RawKeyEvent e) {
     if (e is! RawKeyDownEvent) return KeyEventResult.ignored;
     final platform = Theme.of(context).platform;
@@ -227,7 +208,6 @@ class _GptnixInputBarState extends State<GptnixInputBar> {
       isScrollControlled: true,
       enableDrag: true,
       builder: (_) => _AttachSheet(
-        isDark: widget.isDark,
         onCamera: () async {
           Navigator.pop(context);
           await _safeCall(widget.onPickCamera);
@@ -244,52 +224,11 @@ class _GptnixInputBarState extends State<GptnixInputBar> {
     );
   }
 
-  // ── Colors ──────────────────────────────────────────────────────────────
-
-  Color get _cardBg => widget.isDark ? const Color(0xFF171717) : Colors.white;
-
-  Color get _cardBorder {
-    if (_hasFocus && !widget.isStreaming) {
-      return widget.isDark
-          ? Colors.white.withOpacity(0.16)
-          : Colors.black.withOpacity(0.14);
-    }
-    return widget.isDark
-        ? Colors.white.withOpacity(0.07)
-        : Colors.black.withOpacity(0.07);
-  }
-
-  Color get _textColor =>
-      widget.isDark ? Colors.white : const Color(0xFF0D0D0D);
-
-  Color get _hintColor => widget.isDark
-      ? Colors.white.withOpacity(0.26)
-      : Colors.black.withOpacity(0.26);
-
-  Color get _dividerColor => widget.isDark
-      ? Colors.white.withOpacity(0.05)
-      : Colors.black.withOpacity(0.05);
-
-  List<BoxShadow> get _cardShadow => [
-        BoxShadow(
-          color: Colors.black.withOpacity(widget.isDark ? 0.40 : 0.07),
-          blurRadius: 32,
-          offset: const Offset(0, 8),
-        ),
-        BoxShadow(
-          color: Colors.black.withOpacity(widget.isDark ? 0.18 : 0.03),
-          blurRadius: 8,
-          offset: const Offset(0, 2),
-        ),
-      ];
-
-  // ── Build ────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
     final hasFiles = widget.pickedFiles.isNotEmpty;
 
-    // Padding: safe area bottom only (keyboard handled by parent / scaffold)
     final double safeBottom = MediaQuery.of(context).padding.bottom;
     if (_kbDebug) {
       // ignore: avoid_print
@@ -297,27 +236,28 @@ class _GptnixInputBarState extends State<GptnixInputBar> {
           'viewInsets.bottom=${MediaQuery.of(context).viewInsets.bottom}');
     }
 
+    // ── Resolved theme colors ──────────────────────────────────────────────
+    final cardBg = theme.secondaryBackground;
+    final cardBorderColor = (_hasFocus && !widget.isStreaming)
+        ? theme.accent1.withOpacity(0.6)
+        : theme.alternate.withOpacity(0.4);
+    final dividerColor = theme.alternate.withOpacity(0.25);
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        12,
-        8,
-        12,
-        10 + safeBottom,
-      ),
+      padding: EdgeInsets.fromLTRB(12, 8, 12, 10 + safeBottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // File preview strip
+          // FIX-02 #6: File attachment chips above bar
           if (hasFiles) ...[
             _FilePreviewStrip(
               files: widget.pickedFiles,
               exts: widget.pickedExts,
-              isDark: widget.isDark,
               onRemove: (i) async =>
                   await _safeCallWithIndex(widget.onRemoveFile, i),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
           ],
 
           // Floating input card
@@ -325,109 +265,126 @@ class _GptnixInputBarState extends State<GptnixInputBar> {
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
             decoration: BoxDecoration(
-              color: _cardBg,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: _cardBorder, width: 1.0),
-              boxShadow: _cardShadow,
+              color: cardBg,
+              borderRadius: BorderRadius.circular(kInputBarRadius),
+              border: Border.all(color: cardBorderColor, width: 1.0),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.10),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(21),
+              borderRadius: BorderRadius.circular(kInputBarRadius - 1),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // TextField
-                  Focus(
-                    onKey: _handleKey,
-                    child: TextField(
-                      controller: _ctrl,
-                      focusNode: _focus,
-                      minLines: 1,
-                      maxLines: 5,
-                      enabled: true,
-                      canRequestFocus: !widget.isStreaming,
-                      readOnly: widget.isStreaming,
-                      style: TextStyle(
-                        fontSize: 15.5,
-                        height: 1.5,
-                        letterSpacing: -0.25,
-                        fontWeight: FontWeight.w400,
-                        color: widget.isStreaming
-                            ? _textColor.withOpacity(0.35)
-                            : _textColor,
-                      ),
-                      cursorColor: const Color(0xFF3B82F6),
-                      cursorWidth: 2.0,
-                      cursorRadius: const Radius.circular(2),
-                      decoration: InputDecoration(
-                        hintText: widget.isStreaming
-                            ? 'Generiram odgovor…'
-                            : 'Napiši poruku…',
-                        hintStyle: TextStyle(
+                  // FIX-02 #1: AnimatedSize for smooth height growth as user types
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 150),
+                    curve: Curves.easeOut,
+                    alignment: Alignment.topCenter,
+                    child: Focus(
+                      onKey: _handleKey,
+                      child: TextField(
+                        controller: _ctrl,
+                        focusNode: _focus,
+                        minLines: 1,
+                        maxLines: 6,
+                        enabled: true,
+                        canRequestFocus: !widget.isStreaming,
+                        readOnly: widget.isStreaming,
+                        style: TextStyle(
                           fontSize: 15.5,
                           height: 1.5,
                           letterSpacing: -0.25,
                           fontWeight: FontWeight.w400,
-                          color: _hintColor,
+                          color: widget.isStreaming
+                              ? theme.primaryText.withOpacity(0.35)
+                              : theme.primaryText,
                         ),
-                        border: InputBorder.none,
-                        isDense: false,
-                        contentPadding:
-                            const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                        cursorColor: theme.accent1,
+                        cursorWidth: 2.0,
+                        cursorRadius: const Radius.circular(2),
+                        decoration: InputDecoration(
+                          hintText: widget.isStreaming
+                              ? 'Generiram odgovor…'
+                              : 'Napiši poruku…',
+                          hintStyle: TextStyle(
+                            fontSize: 15.5,
+                            height: 1.5,
+                            letterSpacing: -0.25,
+                            fontWeight: FontWeight.w400,
+                            color: theme.secondaryText,
+                          ),
+                          border: InputBorder.none,
+                          isDense: false,
+                          contentPadding:
+                              const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                        ),
+                        textInputAction: TextInputAction.newline,
                       ),
-                      textInputAction: TextInputAction.newline,
                     ),
                   ),
 
                   // Hairline divider
-                  Container(height: 0.5, color: _dividerColor),
+                  Container(height: 0.5, color: dividerColor),
 
                   // Toolbar
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 7, 10, 9),
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // Attach button (+)
+                        // Attach (+) — always visible
                         _AttachIconBtn(
-                          isDark: widget.isDark,
                           disabled: widget.isStreaming,
-                          hasBadge: hasFiles ? widget.pickedFiles.length : null,
-                          onTap: widget.isStreaming ? null : _showAttachSheet,
+                          hasBadge:
+                              hasFiles ? widget.pickedFiles.length : null,
+                          onTap:
+                              widget.isStreaming ? null : _showAttachSheet,
                         ),
 
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
 
-                        // ⚡ Deep Think chip
+                        // FIX-02 #7: Think chip — always visible, themed active state
                         _ThinkChip(
                           enabled: widget.deepThink,
                           disabled: widget.isStreaming,
-                          isDark: widget.isDark,
                           onTap: () => _safeCall(widget.onToggleDeepThink),
                         ),
 
                         const Spacer(),
 
-                        // Voice
-                        _ToolbarIconBtn(
-                          icon: Icons.mic_none_rounded,
-                          size: 32,
-                          isDark: widget.isDark,
-                          disabled: widget.isStreaming,
-                          onTap: () => _safeCall(widget.onVoiceChat),
+                        // FIX-02 #4: Mic — fade out during streaming, no layout shift
+                        AnimatedOpacity(
+                          opacity: widget.isStreaming ? 0.0 : 1.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: IgnorePointer(
+                            ignoring: widget.isStreaming,
+                            child: _MicBtn(
+                              isRecording: false,
+                              onTap: () => _safeCall(widget.onVoiceChat),
+                            ),
+                          ),
                         ),
 
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 4),
 
-                        // Send / Stop — rebuilda se samo kad canSend zmijeni
-                        ValueListenableBuilder<bool>(
-                          valueListenable: _canSend,
-                          builder: (ctx, canSend, _) => _SendStopBtn(
-                            isStreaming: widget.isStreaming,
-                            isSending: widget.isSending,
-                            canSend: canSend,
-                            isDark: widget.isDark,
-                            onSend: () => _safeCall(widget.onSend),
-                            onStop: () => _safeCall(widget.onStop),
+                        // FIX-02 #2: Send/Stop — 3-state, RepaintBoundary so text
+                        // changes don't cause button repaints
+                        RepaintBoundary(
+                          child: ValueListenableBuilder<bool>(
+                            valueListenable: _canSend,
+                            builder: (ctx, canSend, _) => _SendStopBtn(
+                              isStreaming: widget.isStreaming,
+                              isSending: widget.isSending,
+                              canSend: canSend,
+                              onSend: () => _safeCall(widget.onSend),
+                              onStop: () => _safeCall(widget.onStop),
+                            ),
                           ),
                         ),
                       ],
@@ -444,20 +401,18 @@ class _GptnixInputBarState extends State<GptnixInputBar> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// _ThinkChip — animirani Deep Think toggle
+// _ThinkChip — animated deep-think toggle, fully themed
 // ══════════════════════════════════════════════════════════════════════════
 
 class _ThinkChip extends StatefulWidget {
   const _ThinkChip({
     required this.enabled,
     required this.disabled,
-    required this.isDark,
     required this.onTap,
   });
 
   final bool enabled;
   final bool disabled;
-  final bool isDark;
   final VoidCallback onTap;
 
   @override
@@ -466,12 +421,8 @@ class _ThinkChip extends StatefulWidget {
 
 class _ThinkChipState extends State<_ThinkChip> with TickerProviderStateMixin {
   late final AnimationController _glowC;
-  late final AnimationController _scaleC;
-
+  late final AnimationController _fillC;
   bool _pressed = false;
-
-  static const _blue = Color(0xFF3B82F6);
-  static const _blueDark = Color(0xFF60A5FA);
 
   @override
   void initState() {
@@ -480,9 +431,9 @@ class _ThinkChipState extends State<_ThinkChip> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 1800),
     );
-    _scaleC = AnimationController(
+    _fillC = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 220),
       value: widget.enabled ? 1.0 : 0.0,
     );
     if (widget.enabled) _glowC.repeat(reverse: true);
@@ -493,12 +444,12 @@ class _ThinkChipState extends State<_ThinkChip> with TickerProviderStateMixin {
     super.didUpdateWidget(old);
     if (old.enabled != widget.enabled) {
       if (widget.enabled) {
-        _scaleC.forward();
+        _fillC.forward();
         Future.delayed(const Duration(milliseconds: 60), () {
           if (mounted) _glowC.repeat(reverse: true);
         });
       } else {
-        _scaleC.reverse();
+        _fillC.reverse();
         _glowC.animateTo(0,
             duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
       }
@@ -508,117 +459,101 @@ class _ThinkChipState extends State<_ThinkChip> with TickerProviderStateMixin {
   @override
   void dispose() {
     _glowC.dispose();
-    _scaleC.dispose();
+    _fillC.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final blue = widget.isDark ? _blueDark : _blue;
-    final double masterOpacity = widget.disabled ? 0.4 : 1.0;
+    final theme = FlutterFlowTheme.of(context);
 
-    return Opacity(
-      opacity: masterOpacity,
-      child: GestureDetector(
-        onTapDown:
-            widget.disabled ? null : (_) => setState(() => _pressed = true),
-        onTapUp: widget.disabled
-            ? null
-            : (_) {
-                setState(() => _pressed = false);
-                HapticFeedback.lightImpact();
-                widget.onTap();
-              },
-        onTapCancel:
-            widget.disabled ? null : () => setState(() => _pressed = false),
-        child: AnimatedBuilder(
-          animation: Listenable.merge([_glowC, _scaleC]),
-          builder: (context, _) {
-            final glow = _glowC.value; // 0..1..0
-            final scaleT = _scaleC.value; // 0..1
-            final pressScale = _pressed ? 0.94 : 1.0;
+    return Semantics(
+      label: widget.enabled ? 'Disable deep reasoning' : 'Enable deep reasoning',
+      button: true,
+      child: Tooltip(
+        message: 'Deep reasoning mode',
+        child: Opacity(
+          opacity: widget.disabled ? 0.4 : 1.0,
+          child: GestureDetector(
+            onTapDown:
+                widget.disabled ? null : (_) => setState(() => _pressed = true),
+            onTapUp: widget.disabled
+                ? null
+                : (_) {
+                    setState(() => _pressed = false);
+                    HapticFeedback.lightImpact();
+                    widget.onTap();
+                  },
+            onTapCancel:
+                widget.disabled ? null : () => setState(() => _pressed = false),
+            child: AnimatedBuilder(
+              animation: Listenable.merge([_glowC, _fillC]),
+              builder: (context, _) {
+                final t = _fillC.value;
+                final glow = _glowC.value;
 
-            final Color chipBg = Color.lerp(
-              widget.isDark
-                  ? Colors.white.withOpacity(0.05)
-                  : Colors.black.withOpacity(0.04),
-              blue.withOpacity(widget.isDark ? 0.14 : 0.09),
-              scaleT,
-            )!;
+                // FIX-01: all colors from theme
+                final chipBg = Color.lerp(
+                  Colors.transparent,
+                  theme.accent1,
+                  t,
+                )!;
+                final chipBorder = Color.lerp(
+                  theme.alternate.withOpacity(0.6),
+                  theme.accent1,
+                  t,
+                )!;
+                final chipContent = Color.lerp(
+                  theme.secondaryText,
+                  Colors.white,
+                  t,
+                )!;
 
-            final Color chipBorder = Color.lerp(
-              widget.isDark
-                  ? Colors.white.withOpacity(0.09)
-                  : Colors.black.withOpacity(0.07),
-              blue.withOpacity(
-                  widget.isDark ? (0.4 + glow * 0.28) : (0.30 + glow * 0.22)),
-              scaleT,
-            )!;
-
-            final Color chipText = Color.lerp(
-              widget.isDark
-                  ? Colors.white.withOpacity(0.42)
-                  : Colors.black.withOpacity(0.36),
-              blue,
-              scaleT,
-            )!;
-
-            final glowAmount =
-                scaleT * (widget.isDark ? 0.20 : 0.14) + glow * scaleT * 0.16;
-
-            return Transform.scale(
-              scale: pressScale,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: chipBg,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: chipBorder, width: 1.0),
-                  boxShadow: scaleT > 0.1
-                      ? [
-                          BoxShadow(
-                            color: blue.withOpacity(glowAmount),
-                            blurRadius: 10 + glow * 8,
-                            spreadRadius: 0,
-                          ),
-                        ]
-                      : [],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      child: Icon(
-                        widget.enabled
-                            ? Icons.bolt_rounded
-                            : Icons.bolt_outlined,
-                        key: ValueKey(widget.enabled),
-                        size: 13,
-                        color: chipText,
-                      ),
+                return Transform.scale(
+                  scale: _pressed ? 0.94 : 1.0,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: chipBg,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: chipBorder, width: 1.0),
+                      boxShadow: t > 0.1
+                          ? [
+                              BoxShadow(
+                                color: theme.accent1
+                                    .withOpacity(t * (0.15 + glow * 0.15)),
+                                blurRadius: 8 + glow * 6,
+                              ),
+                            ]
+                          : [],
                     ),
-                    const SizedBox(width: 4),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      child: Text(
-                        widget.enabled ? 'Deep Think' : 'Think',
-                        key: ValueKey(widget.enabled),
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: chipText,
-                          letterSpacing: -0.15,
-                          height: 1.0,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.psychology_rounded,
+                          size: 13,
+                          color: chipContent,
                         ),
-                      ),
+                        const SizedBox(width: 4),
+                        Text(
+                          widget.enabled ? 'Thinking' : 'Think',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: chipContent,
+                            letterSpacing: -0.15,
+                            height: 1.0,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            );
-          },
+                  ),
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -626,7 +561,7 @@ class _ThinkChipState extends State<_ThinkChip> with TickerProviderStateMixin {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// _SendStopBtn — state machine: disabled / canSend / sending / streaming
+// _SendStopBtn — 3-state: disabled / ready / streaming — fully themed
 // ══════════════════════════════════════════════════════════════════════════
 
 class _SendStopBtn extends StatefulWidget {
@@ -634,7 +569,6 @@ class _SendStopBtn extends StatefulWidget {
     required this.isStreaming,
     required this.isSending,
     required this.canSend,
-    required this.isDark,
     required this.onSend,
     required this.onStop,
   });
@@ -642,7 +576,6 @@ class _SendStopBtn extends StatefulWidget {
   final bool isStreaming;
   final bool isSending;
   final bool canSend;
-  final bool isDark;
   final VoidCallback onSend;
   final VoidCallback onStop;
 
@@ -684,159 +617,282 @@ class _SendStopBtnState extends State<_SendStopBtn>
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    const double size = 36;
+  void _onTap() {
+    HapticFeedback.mediumImpact();
+    if (widget.isStreaming) {
+      widget.onStop();
+    } else if (widget.canSend) {
+      widget.onSend();
+    }
+  }
 
-    if (widget.isSending) {
-      return SizedBox(
-        width: size,
-        height: size,
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF3B82F6).withOpacity(0.30),
-            shape: BoxShape.circle,
-          ),
-          child: const Center(
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                valueColor: AlwaysStoppedAnimation(Colors.white),
-              ),
+  Widget _buildSpinner(FlutterFlowTheme theme) {
+    return SizedBox(
+      width: kSendBtnSize,
+      height: kSendBtnSize,
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.accent1.withOpacity(0.25),
+          shape: BoxShape.circle,
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              valueColor: AlwaysStoppedAnimation(Colors.white),
             ),
           ),
         ),
-      );
-    }
+      ),
+    );
+  }
 
+  Widget _buildSend(FlutterFlowTheme theme) {
+    return Container(
+      key: const ValueKey('send'),
+      width: kSendBtnSize,
+      height: kSendBtnSize,
+      decoration: widget.canSend
+          ? BoxDecoration(
+              gradient: LinearGradient(
+                colors: [theme.accent1, theme.accent2],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+            )
+          : BoxDecoration(
+              color: theme.alternate.withOpacity(0.6),
+              shape: BoxShape.circle,
+            ),
+      child: Center(
+        child: Icon(
+          Icons.arrow_upward_rounded,
+          color: widget.canSend ? Colors.white : theme.secondaryText,
+          size: 20,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStop(FlutterFlowTheme theme) {
     return AnimatedBuilder(
+      key: const ValueKey('stop'),
       animation: _stopGlowC,
-      builder: (context, _) {
+      builder: (_, __) {
         final glow = _stopGlowC.value;
-
-        final Color bg;
-        final IconData icon;
-        final Color iconColor;
-        final List<BoxShadow> shadows;
-
-        if (widget.isStreaming) {
-          bg = widget.isDark ? const Color(0xFF292929) : Colors.white;
-          icon = Icons.stop_rounded;
-          iconColor = widget.isDark
-              ? Colors.white.withOpacity(0.85)
-              : const Color(0xFF0D0D0D).withOpacity(0.80);
-          shadows = [
-            BoxShadow(
-              color: Colors.black.withOpacity(
-                  widget.isDark ? (0.20 + glow * 0.10) : (0.08 + glow * 0.04)),
-              blurRadius: 10 + glow * 4,
-              offset: const Offset(0, 3),
+        return Container(
+          width: kSendBtnSize,
+          height: kSendBtnSize,
+          decoration: BoxDecoration(
+            color: theme.error.withOpacity(0.12),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: theme.error.withOpacity(0.45 + glow * 0.3),
+              width: 1.5,
             ),
-          ];
-        } else if (widget.canSend) {
-          bg = const Color(0xFF3B82F6);
-          icon = Icons.arrow_upward_rounded;
-          iconColor = Colors.white;
-          shadows = [
-            BoxShadow(
-              color: const Color(0xFF3B82F6)
-                  .withOpacity(widget.isDark ? 0.45 : 0.32),
-              blurRadius: 14,
-              offset: const Offset(0, 5),
-            ),
-          ];
-        } else {
-          bg = widget.isDark
-              ? Colors.white.withOpacity(0.07)
-              : Colors.black.withOpacity(0.06);
-          icon = Icons.arrow_upward_rounded;
-          iconColor = widget.isDark
-              ? Colors.white.withOpacity(0.22)
-              : Colors.black.withOpacity(0.20);
-          shadows = [];
-        }
-
-        final bool active = widget.isStreaming || widget.canSend;
-        final double scale = _pressed ? 0.90 : 1.0;
-
-        void onTap() {
-          if (!active) return;
-          HapticFeedback.mediumImpact();
-          if (widget.isStreaming) {
-            widget.onStop();
-          } else {
-            widget.onSend();
-          }
-        }
-
-        return GestureDetector(
-          onTapDown: active ? (_) => setState(() => _pressed = true) : null,
-          onTapUp: active
-              ? (_) {
-                  setState(() => _pressed = false);
-                  onTap();
-                }
-              : null,
-          onTapCancel: active ? () => setState(() => _pressed = false) : null,
-          onTap: active ? onTap : null,
-          child: AnimatedScale(
-            scale: scale,
-            duration: const Duration(milliseconds: 90),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                color: bg,
-                shape: BoxShape.circle,
-                boxShadow: shadows,
-              ),
-              child: Center(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 190),
-                  transitionBuilder: (child, anim) => FadeTransition(
-                    opacity: anim,
-                    child: ScaleTransition(
-                      scale: Tween<double>(begin: 0.80, end: 1.0)
-                          .animate(CurvedAnimation(
-                        parent: anim,
-                        curve: Curves.easeOutBack,
-                      )),
-                      child: child,
-                    ),
-                  ),
-                  child: Icon(
-                    icon,
-                    key: ValueKey(icon.codePoint),
-                    color: iconColor,
-                    size: 18,
-                  ),
-                ),
-              ),
+          ),
+          child: Center(
+            child: Icon(
+              Icons.stop_rounded,
+              color: theme.error,
+              size: 22,
             ),
           ),
         );
       },
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+
+    if (widget.isSending) return _buildSpinner(theme);
+
+    final bool active = widget.isStreaming || widget.canSend;
+
+    return Semantics(
+      label: widget.isStreaming ? 'Stop generating' : 'Send message',
+      button: true,
+      child: Tooltip(
+        message: widget.isStreaming ? 'Stop' : 'Send',
+        child: GestureDetector(
+          onTapDown: active ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: active
+              ? (_) {
+                  setState(() => _pressed = false);
+                  _onTap();
+                }
+              : null,
+          onTapCancel: active ? () => setState(() => _pressed = false) : null,
+          onTap: active ? _onTap : null,
+          child: AnimatedScale(
+            scale: _pressed ? 0.90 : 1.0,
+            duration: const Duration(milliseconds: 90),
+            child: AnimatedSwitcher(
+              // FIX-02 #2: 150ms crossfade, same position — no layout shift
+              duration: const Duration(milliseconds: 150),
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.80, end: 1.0).animate(
+                    CurvedAnimation(
+                      parent: anim,
+                      curve: Curves.easeOutBack,
+                    ),
+                  ),
+                  child: child,
+                ),
+              ),
+              child: widget.isStreaming
+                  ? _buildStop(theme)
+                  : _buildSend(theme),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// _AttachIconBtn — + gumb za attach (s badge)
+// _MicBtn — mic button with optional recording indicator, fully themed
+// ══════════════════════════════════════════════════════════════════════════
+
+class _MicBtn extends StatefulWidget {
+  const _MicBtn({
+    required this.isRecording,
+    required this.onTap,
+  });
+
+  final bool isRecording;
+  final dynamic onTap;
+
+  @override
+  State<_MicBtn> createState() => _MicBtnState();
+}
+
+class _MicBtnState extends State<_MicBtn> with SingleTickerProviderStateMixin {
+  late final AnimationController _dotC;
+  bool _pressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _dotC = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    if (widget.isRecording) _dotC.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MicBtn old) {
+    super.didUpdateWidget(old);
+    if (old.isRecording != widget.isRecording) {
+      if (widget.isRecording) {
+        _dotC.repeat(reverse: true);
+      } else {
+        _dotC.stop();
+        _dotC.value = 0;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _dotC.dispose();
+    super.dispose();
+  }
+
+  Future<void> _safeCall(dynamic cb) async {
+    if (cb == null) return;
+    try {
+      final r = cb();
+      if (r is Future) await r.catchError((_) {});
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    final Color iconColor =
+        widget.isRecording ? theme.error : theme.secondaryText;
+
+    return Semantics(
+      label: widget.isRecording ? 'Stop recording' : 'Microphone',
+      button: true,
+      child: Tooltip(
+        message: widget.isRecording ? 'Stop recording' : 'Voice input',
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) {
+            setState(() => _pressed = false);
+            HapticFeedback.lightImpact();
+            _safeCall(widget.onTap);
+          },
+          onTapCancel: () => setState(() => _pressed = false),
+          child: AnimatedScale(
+            scale: _pressed ? 0.88 : 1.0,
+            duration: const Duration(milliseconds: 90),
+            child: SizedBox(
+              width: kActionBtnSize,
+              height: kActionBtnSize,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.mic_rounded,
+                      key: ValueKey(widget.isRecording),
+                      color: iconColor,
+                      size: kActionBtnSize * 0.6,
+                    ),
+                  ),
+                  if (widget.isRecording)
+                    Positioned(
+                      bottom: 3,
+                      right: 3,
+                      child: AnimatedBuilder(
+                        animation: _dotC,
+                        builder: (_, __) => Opacity(
+                          opacity: 0.3 + _dotC.value * 0.7,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: theme.error,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// _AttachIconBtn — + attach button with badge, fully themed
 // ══════════════════════════════════════════════════════════════════════════
 
 class _AttachIconBtn extends StatefulWidget {
   const _AttachIconBtn({
-    required this.isDark,
     required this.disabled,
     this.hasBadge,
     this.onTap,
   });
 
-  final bool isDark;
   final bool disabled;
   final int? hasBadge;
   final VoidCallback? onTap;
@@ -850,60 +906,64 @@ class _AttachIconBtnState extends State<_AttachIconBtn> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
     final Color iconColor = widget.disabled
-        ? (widget.isDark
-            ? Colors.white.withOpacity(0.18)
-            : Colors.black.withOpacity(0.16))
-        : (widget.isDark
-            ? Colors.white.withOpacity(0.68)
-            : Colors.black.withOpacity(0.62));
+        ? theme.secondaryText.withOpacity(0.35)
+        : theme.secondaryText;
 
-    return GestureDetector(
-      onTapDown:
-          widget.disabled ? null : (_) => setState(() => _pressed = true),
-      onTapUp: widget.disabled
-          ? null
-          : (_) {
-              setState(() => _pressed = false);
-              widget.onTap?.call();
-            },
-      onTapCancel:
-          widget.disabled ? null : () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.88 : 1.0,
-        duration: const Duration(milliseconds: 90),
-        child: SizedBox(
-          width: 32,
-          height: 32,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Icon(Icons.add_rounded, size: 22, color: iconColor),
-              if (widget.hasBadge != null && widget.hasBadge! > 0)
-                Positioned(
-                  top: 1,
-                  right: 1,
-                  child: Container(
-                    width: 14,
-                    height: 14,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF3B82F6),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        widget.hasBadge! > 9 ? '9+' : '${widget.hasBadge}',
-                        style: const TextStyle(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.0,
+    return Semantics(
+      label: 'Attach file',
+      button: true,
+      child: Tooltip(
+        message: 'Attach file',
+        child: GestureDetector(
+          onTapDown:
+              widget.disabled ? null : (_) => setState(() => _pressed = true),
+          onTapUp: widget.disabled
+              ? null
+              : (_) {
+                  setState(() => _pressed = false);
+                  widget.onTap?.call();
+                },
+          onTapCancel:
+              widget.disabled ? null : () => setState(() => _pressed = false),
+          child: AnimatedScale(
+            scale: _pressed ? 0.88 : 1.0,
+            duration: const Duration(milliseconds: 90),
+            child: SizedBox(
+              width: kActionBtnSize,
+              height: kActionBtnSize,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(Icons.add_rounded, size: 22, color: iconColor),
+                  if (widget.hasBadge != null && widget.hasBadge! > 0)
+                    Positioned(
+                      top: 1,
+                      right: 1,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: theme.accent1,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            widget.hasBadge! > 9 ? '9+' : '${widget.hasBadge}',
+                            style: const TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.0,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -912,20 +972,18 @@ class _AttachIconBtnState extends State<_AttachIconBtn> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// _ToolbarIconBtn — generic icon gumb (voice, itd.)
+// _ToolbarIconBtn — generic icon button (kept for future use), themed
 // ══════════════════════════════════════════════════════════════════════════
 
 class _ToolbarIconBtn extends StatefulWidget {
   const _ToolbarIconBtn({
     required this.icon,
-    required this.isDark,
     required this.disabled,
     this.size = 32,
     this.onTap,
   });
 
   final IconData icon;
-  final bool isDark;
   final bool disabled;
   final double size;
   final VoidCallback? onTap;
@@ -939,13 +997,10 @@ class _ToolbarIconBtnState extends State<_ToolbarIconBtn> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
     final Color c = widget.disabled
-        ? (widget.isDark
-            ? Colors.white.withOpacity(0.18)
-            : Colors.black.withOpacity(0.16))
-        : (widget.isDark
-            ? Colors.white.withOpacity(0.60)
-            : Colors.black.withOpacity(0.55));
+        ? theme.secondaryText.withOpacity(0.35)
+        : theme.secondaryText;
 
     return GestureDetector(
       onTapDown:
@@ -974,276 +1029,144 @@ class _ToolbarIconBtnState extends State<_ToolbarIconBtn> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// _FilePreviewStrip — horizontalni scroll s thumbnail/doc preview
+// _FilePreviewStrip — horizontal chip row, fully themed
 // ══════════════════════════════════════════════════════════════════════════
 
 class _FilePreviewStrip extends StatelessWidget {
   const _FilePreviewStrip({
     required this.files,
     required this.exts,
-    required this.isDark,
     required this.onRemove,
   });
 
   final List<FFUploadedFile> files;
   final List<String> exts;
-  final bool isDark;
-
-  /// ✅ ovdje je normalno tipizirano (interni widget), ali parent call je FF-safe
   final Future<void> Function(int index) onRemove;
 
-  String _formatTotalSize() {
-    final total = files.fold<int>(0, (acc, f) => acc + (f.bytes?.length ?? 0));
-    if (total < 1024) return '${total}B';
-    if (total < 1024 * 1024) return '${(total / 1024).toStringAsFixed(0)}KB';
-    return '${(total / (1024 * 1024)).toStringAsFixed(1)}MB';
+  IconData _iconForExt(String ext) {
+    if (ext == 'png' || ext == 'jpg' || ext == 'jpeg' || ext == 'webp') {
+      return Icons.image_rounded;
+    }
+    if (ext == 'pdf') return Icons.picture_as_pdf_rounded;
+    return Icons.insert_drive_file_rounded;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final labelColor = isDark
-        ? Colors.white.withOpacity(0.32)
-        : Colors.black.withOpacity(0.32);
-
-    final count = files.length;
-    final label =
-        '$count ${count == 1 ? 'prilog' : 'priloga'} · ${_formatTotalSize()}';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          height: 76,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            itemCount: files.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (ctx, i) {
-              final ext = (i < exts.length ? exts[i] : '')
-                  .toLowerCase()
-                  .replaceAll('.', '');
-              return _FileTile(
-                file: files[i],
-                ext: ext,
-                isDark: isDark,
-                onRemove: () async => await onRemove(i),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 5),
-        Padding(
-          padding: const EdgeInsets.only(left: 4),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w500,
-              color: labelColor,
-              letterSpacing: -0.1,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _FileTile extends StatelessWidget {
-  const _FileTile({
-    required this.file,
-    required this.ext,
-    required this.isDark,
-    required this.onRemove,
-  });
-
-  final FFUploadedFile file;
-  final String ext;
-  final bool isDark;
-  final VoidCallback onRemove;
-
-  bool get _isImage =>
+  bool _isImage(String ext) =>
       ext == 'png' || ext == 'jpg' || ext == 'jpeg' || ext == 'webp';
 
-  Color get _extAccent {
-    switch (ext) {
-      case 'pdf':
-        return const Color(0xFFEF4444);
-      case 'doc':
-      case 'docx':
-        return const Color(0xFF3B82F6);
-      case 'xls':
-      case 'xlsx':
-        return const Color(0xFF10B981);
-      case 'txt':
-      case 'md':
-      case 'csv':
-        return const Color(0xFF8B5CF6);
-      default:
-        return const Color(0xFF6B7280);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final bg = isDark ? const Color(0xFF242424) : Colors.white;
-    final border = isDark
-        ? Colors.white.withOpacity(0.08)
-        : Colors.black.withOpacity(0.08);
-    final bytes = file.bytes;
-    final hasImage = _isImage && bytes != null && bytes.isNotEmpty;
+    final theme = FlutterFlowTheme.of(context);
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          width: 64,
-          height: 76,
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(color: border, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.25 : 0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: hasImage
-                ? Image.memory(
-                    bytes!,
-                    fit: BoxFit.cover,
-                    width: 64,
-                    height: 76,
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: _extAccent.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        child: Center(
-                          child: Text(
-                            ext.isEmpty ? '?' : ext.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: ext.length > 3 ? 7.5 : 9,
-                              fontWeight: FontWeight.w800,
-                              color: _extAccent,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Text(
-                          file.name ?? 'file',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w500,
-                            color: isDark
-                                ? Colors.white.withOpacity(0.42)
-                                : Colors.black.withOpacity(0.40),
-                            height: 1.1,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-        Positioned(
-          top: -5,
-          right: -5,
-          child: GestureDetector(
-            onTap: onRemove,
-            child: Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF383838) : Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withOpacity(0.10)
-                      : Colors.black.withOpacity(0.10),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.18),
-                    blurRadius: 6,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Icon(
-                Icons.close_rounded,
-                size: 12,
-                color: isDark
-                    ? Colors.white.withOpacity(0.72)
-                    : Colors.black.withOpacity(0.60),
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        itemCount: files.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (ctx, i) {
+          final ext = (i < exts.length ? exts[i] : '')
+              .toLowerCase()
+              .replaceAll('.', '');
+          final file = files[i];
+          final bytes = file.bytes;
+          final hasImage = _isImage(ext) && bytes != null && bytes.isNotEmpty;
+          final name = file.name ?? 'file';
+          final displayName =
+              name.length > 18 ? '${name.substring(0, 15)}…' : name;
+
+          return Container(
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: theme.alternate.withOpacity(0.25),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: theme.alternate.withOpacity(0.5),
+                width: 1,
               ),
             ),
-          ),
-        ),
-      ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasImage)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Image.memory(
+                      bytes!,
+                      width: 24,
+                      height: 24,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                else
+                  Icon(
+                    _iconForExt(ext),
+                    size: 16,
+                    color: theme.accent1,
+                  ),
+                const SizedBox(width: 4),
+                Text(
+                  displayName,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: theme.primaryText,
+                    height: 1.0,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => onRemove(i),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 14,
+                    color: theme.secondaryText,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// _AttachSheet — bottom sheet s 3 opcije (Camera / Gallery / Files)
+// _AttachSheet — bottom sheet, fully themed
 // ══════════════════════════════════════════════════════════════════════════
 
 class _AttachSheet extends StatelessWidget {
   const _AttachSheet({
-    required this.isDark,
     required this.onCamera,
     required this.onGallery,
     required this.onFiles,
   });
 
-  final bool isDark;
   final VoidCallback onCamera;
   final VoidCallback onGallery;
   final VoidCallback onFiles;
 
   @override
   Widget build(BuildContext context) {
-    final bg = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final outerBorder = isDark
-        ? Colors.white.withOpacity(0.07)
-        : Colors.black.withOpacity(0.06);
-    final divColor = isDark
-        ? Colors.white.withOpacity(0.05)
-        : Colors.black.withOpacity(0.05);
+    final theme = FlutterFlowTheme.of(context);
 
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         child: Container(
           decoration: BoxDecoration(
-            color: bg,
+            color: theme.secondaryBackground,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: outerBorder, width: 1),
+            border: Border.all(
+              color: theme.alternate.withOpacity(0.3),
+              width: 1,
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.45 : 0.14),
+                color: Colors.black.withOpacity(0.20),
                 blurRadius: 36,
                 offset: const Offset(0, -6),
               ),
@@ -1259,9 +1182,7 @@ class _AttachSheet extends StatelessWidget {
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withOpacity(0.14)
-                          : Colors.black.withOpacity(0.11),
+                      color: theme.alternate.withOpacity(0.5),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -1269,36 +1190,36 @@ class _AttachSheet extends StatelessWidget {
               ),
               _SheetOption(
                 icon: Icons.camera_alt_rounded,
+                // Intentional brand color — no theme equivalent
                 iconBg: const Color(0xFFF97316),
                 title: 'Kamera',
                 subtitle: 'Fotografiraj ili snimi video',
-                isDark: isDark,
                 onTap: onCamera,
               ),
               Container(
                 height: 0.5,
                 margin: const EdgeInsets.only(left: 76),
-                color: divColor,
+                color: theme.alternate.withOpacity(0.3),
               ),
               _SheetOption(
                 icon: Icons.photo_library_rounded,
+                // Intentional brand color — no theme equivalent
                 iconBg: const Color(0xFF8B5CF6),
                 title: 'Galerija',
                 subtitle: 'Odaberi slike iz galerije',
-                isDark: isDark,
                 onTap: onGallery,
               ),
               Container(
                 height: 0.5,
                 margin: const EdgeInsets.only(left: 76),
-                color: divColor,
+                color: theme.alternate.withOpacity(0.3),
               ),
               _SheetOption(
                 icon: Icons.folder_rounded,
+                // Intentional brand color — no theme equivalent
                 iconBg: const Color(0xFF10B981),
                 title: 'Datoteke',
                 subtitle: 'PDF, Word, Excel i ostalo',
-                isDark: isDark,
                 onTap: onFiles,
               ),
               const SizedBox(height: 6),
@@ -1316,7 +1237,6 @@ class _SheetOption extends StatefulWidget {
     required this.iconBg,
     required this.title,
     required this.subtitle,
-    required this.isDark,
     required this.onTap,
   });
 
@@ -1324,7 +1244,6 @@ class _SheetOption extends StatefulWidget {
   final Color iconBg;
   final String title;
   final String subtitle;
-  final bool isDark;
   final VoidCallback onTap;
 
   @override
@@ -1336,16 +1255,7 @@ class _SheetOptionState extends State<_SheetOption> {
 
   @override
   Widget build(BuildContext context) {
-    final textColor = widget.isDark ? Colors.white : const Color(0xFF0D0D0D);
-    final subColor = widget.isDark
-        ? Colors.white.withOpacity(0.42)
-        : Colors.black.withOpacity(0.38);
-    final pressedBg = widget.isDark
-        ? Colors.white.withOpacity(0.04)
-        : Colors.black.withOpacity(0.025);
-    final chevronColor = widget.isDark
-        ? Colors.white.withOpacity(0.18)
-        : Colors.black.withOpacity(0.16);
+    final theme = FlutterFlowTheme.of(context);
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -1356,7 +1266,9 @@ class _SheetOptionState extends State<_SheetOption> {
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 100),
-        color: _pressed ? pressedBg : Colors.transparent,
+        color: _pressed
+            ? theme.alternate.withOpacity(0.15)
+            : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
@@ -1386,7 +1298,7 @@ class _SheetOptionState extends State<_SheetOption> {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: textColor,
+                      color: theme.primaryText,
                       letterSpacing: -0.2,
                     ),
                   ),
@@ -1396,14 +1308,18 @@ class _SheetOptionState extends State<_SheetOption> {
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w400,
-                      color: subColor,
+                      color: theme.secondaryText,
                       letterSpacing: -0.1,
                     ),
                   ),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, size: 20, color: chevronColor),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: theme.secondaryText.withOpacity(0.5),
+            ),
           ],
         ),
       ),

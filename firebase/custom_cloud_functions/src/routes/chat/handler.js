@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 /**
  * handler.js — Main async route handler (Part 2 of chat.js modularization)
  * Auto-generated from gptnix-backend-v5_2_2-FIX19c/src/routes/chat.js
@@ -1189,6 +1189,7 @@ const lengthInstructionAddon = _lengthParse.systemAddon;
         // Send padding comment (2KB) to break buffering
         const padding = ':' + ' '.repeat(2000) + '\n\n';
         res.write(padding);
+        safeFlush(res);
         
         // Force flush headers (critical for Cloud Run)
         if (typeof res.flushHeaders === 'function') {
@@ -3492,8 +3493,10 @@ console.log('✅ [IMAGE GEN] Success! Status:', result.status);
               console.warn('[POLISH] pseudo-stream polish error (non-fatal):', polishErr.message);
             }
 
-            res.write(`data: ${JSON.stringify({ type: 'token', text: draft, final: true, ttfbMs: draftLatency })}\n\n`);
-            res.write(`data: ${JSON.stringify({ type: 'done', ok: true })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: 'token', content: draft, final: true, ttfbMs: draftLatency })}\n\n`);
+            safeFlush(res);
+            res.write(`data: ${JSON.stringify({ type: 'done', ok: true, message: draft })}\n\n`);
+            safeFlush(res);
             res.end();
 
             // Memory extraction (fire-and-forget)
@@ -3729,6 +3732,7 @@ console.log('✅ [IMAGE GEN] Success! Status:', result.status);
         if (!res.destroyed) {
           const out = JSON.stringify({ type: 'error', message: error.message || 'Stream error' });
           res.write(`data: ${out}\n\n`);
+          safeFlush(res);
           res.end();
         }
       }
@@ -3740,6 +3744,7 @@ console.log('✅ [IMAGE GEN] Success! Status:', result.status);
         try {
           const out = JSON.stringify({ type: 'error', message: error.message || 'Chat error' });
           res.write(`data: ${out}\n\n`);
+          safeFlush(res);
           res.end();
           return;
         } catch (_) {}

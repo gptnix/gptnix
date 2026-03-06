@@ -1138,6 +1138,7 @@ class _GptnixVoiceChatPageState extends State<GptnixVoiceChatPage>
         ),
         child: MarkdownBody(
           data: m.text,
+          selectable: true,
           softLineBreak: true,
           styleSheet: MarkdownStyleSheet(
             p: TextStyle(
