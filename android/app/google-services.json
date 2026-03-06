@@ -1,0 +1,130 @@
+{
+  "project_info": {
+    "project_number": "496151959855",
+    "project_id": "gptnix-390f1",
+    "storage_bucket": "gptnix-390f1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:496151959855:android:9a4ab36c5148b30b69a9da",
+        "android_client_info": {
+          "package_name": "com.gptnix.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "496151959855-6lal7rsqq41cso00ardrb7d9aqkd5k0n.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gptnix.app",
+            "certificate_hash": "b9ef74a5a45fffc850af2ae715891720083d7708"
+          }
+        },
+        {
+          "client_id": "496151959855-car4uon7627s8jlts9e1ipr3u1ufh2mt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gptnix.app",
+            "certificate_hash": "e617e78a6d08e043a21b9590ea649067342f4458"
+          }
+        },
+        {
+          "client_id": "496151959855-k6ilg49tfdttnjj1i6e5fl782inpvh8k.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gptnix.app",
+            "certificate_hash": "9bbb3186b2189ef16d8f272bdab59362c395cbb4"
+          }
+        },
+        {
+          "client_id": "496151959855-r40obsqbb8to2i853r0vlo2dpr667a5l.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gptnix.app",
+            "certificate_hash": "295acc48cae324f025a89867b9f692199c9e7323"
+          }
+        },
+        {
+          "client_id": "496151959855-tsf7rh348jf3jd324np5nq1u9kq1t8p0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gptnix.app",
+            "certificate_hash": "1de9feb4ea757e388e0b74b589af253598a86094"
+          }
+        },
+        {
+          "client_id": "496151959855-1ab50mm1pfndpvhe3tv1nng7m0cdfnu6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBIZuuSZtZquhoh2OYZljTcWLy-mnN8nhE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "496151959855-1ab50mm1pfndpvhe3tv1nng7m0cdfnu6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "496151959855-l4cf12kkbsohge5g4e2slhc95nclf4dc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.gptnix.app"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:496151959855:android:bf1020b2925dbfab69a9da",
+        "android_client_info": {
+          "package_name": "com.migambi.deepseek"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "496151959855-dfn9al7cd188mio48cmao4rih209d2oa.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.migambi.deepseek",
+            "certificate_hash": "1de9feb4ea757e388e0b74b589af253598a86094"
+          }
+        },
+        {
+          "client_id": "496151959855-1ab50mm1pfndpvhe3tv1nng7m0cdfnu6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBIZuuSZtZquhoh2OYZljTcWLy-mnN8nhE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "496151959855-1ab50mm1pfndpvhe3tv1nng7m0cdfnu6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "496151959855-l4cf12kkbsohge5g4e2slhc95nclf4dc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.gptnix.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

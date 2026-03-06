@@ -1,0 +1,31 @@
+{
+  "name": "gptnix-backend-v5",
+  "version": "5.1.0",
+  "description": "GPTNiX Backend V5.1 - Smart Multilingual Router (URL Detection, Question Heuristics)",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "start:cluster": "NODE_ENV=production node index.js",
+    "start:gc": "node --expose-gc index.js",
+    "dev": "NODE_ENV=development node index.js"
+  },
+  "dependencies": {
+    "@google-cloud/vision": "^4.3.2",
+    "@qdrant/js-client-rest": "^1.16.2",
+    "adm-zip": "^0.5.16",
+    "cors": "^2.8.5",
+    "csv-parse": "^6.1.0",
+    "express": "^4.19.2",
+    "firebase-admin": "^13.6.0",
+    "mammoth": "^1.11.0",
+    "multer": "^2.0.2",
+    "openai": "^6.10.0",
+    "pdf-parse": "^1.1.1",
+    "uuid": "^9.0.1",
+    "xlsx": "^0.18.5"
+  }
+}
