@@ -85,11 +85,11 @@ class ModernDrawerScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final vm = context.watch<ModernDrawerNotifier>();
 
-    final bg = isDark ? const Color(0xFF0F0F0F) : Colors.white;
-    final divider = isDark ? Colors.white10 : Colors.black12;
+    final theme = FlutterFlowTheme.of(context);
+    final divider = theme.alternate;
 
     return Container(
-      color: bg,
+      color: theme.primaryBackground,
       child: SafeArea(
         bottom: true,
         child: Stack(
@@ -139,7 +139,7 @@ class ModernDrawerScaffold extends StatelessWidget {
                   onTap: onCloseSearchOverlay,
                   behavior: HitTestBehavior.opaque,
                   child: Container(
-                    color: isDark ? Colors.black54 : Colors.black38,
+                    color: Colors.black54,
                     child: Align(
                       alignment: Alignment.topCenter,
                       child: GestureDetector(

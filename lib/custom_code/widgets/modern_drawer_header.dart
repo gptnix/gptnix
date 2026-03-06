@@ -28,6 +28,8 @@ class ModernDrawerHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Row(
@@ -36,7 +38,7 @@ class ModernDrawerHeader extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+              color: theme.primaryText,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
@@ -45,7 +47,7 @@ class ModernDrawerHeader extends StatelessWidget {
                 style: GoogleFonts.inter(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+                  color: theme.primaryBackground,
                 ),
               ),
             ),
@@ -57,7 +59,7 @@ class ModernDrawerHeader extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
-                color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                color: theme.primaryText,
                 letterSpacing: -0.5,
               ),
             ),
@@ -71,18 +73,14 @@ class ModernDrawerHeader extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+                  color: theme.secondaryBackground,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF2A2A2A)
-                        : const Color(0xFFE5E5E5),
-                  ),
+                  border: Border.all(color: theme.alternate),
                 ),
                 child: Icon(
                   Icons.edit_outlined,
                   size: 20,
-                  color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                  color: theme.primaryText,
                 ),
               ),
             ),

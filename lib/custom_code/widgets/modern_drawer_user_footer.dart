@@ -37,14 +37,18 @@ class ModernDrawerUserFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: FutureBuilder<DocumentSnapshot>(
-        future: userDoc.get(),
+      child: StreamBuilder<DocumentSnapshot>(
+        stream: userDoc.snapshots(),
         builder: (context, snapshot) {
           final userData = snapshot.data?.data() as Map<String, dynamic>?;
           final userDataSafe = userData ?? {};
           final fullName = modernDrawerGetFullName(userDataSafe);
           final email = userData?['email']?.toString() ?? '';
           final initials = modernDrawerGetUserInitials(userDataSafe);
+          final photoUrl =
+              (userData?['photo_url'] ?? userData?['photoUrl'] ?? '')
+                  .toString()
+                  .trim();
 
           return Semantics(
             button: true,
@@ -57,27 +61,22 @@ class ModernDrawerUserFooter extends StatelessWidget {
               },
               child: Row(
                 children: [
-                  Container(
+                  SizedBox(
                     width: 40,
                     height: 40,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Center(
-                      child: Text(
-                        initials,
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
+                    child: photoUrl.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.network(
+                              photoUrl,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  _InitialsAvatar(initials: initials),
+                            ),
+                          )
+                        : _InitialsAvatar(initials: initials),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -89,8 +88,7 @@ class ModernDrawerUserFooter extends StatelessWidget {
                           style: GoogleFonts.inter(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color:
-                                isDark ? Colors.white : const Color(0xFF1A1A1A),
+                            color: FlutterFlowTheme.of(context).primaryText,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -100,9 +98,8 @@ class ModernDrawerUserFooter extends StatelessWidget {
                             email,
                             style: GoogleFonts.inter(
                               fontSize: 12,
-                              color: isDark
-                                  ? const Color(0xFF6B6B6B)
-                                  : const Color(0xFF8E8E93),
+                              color:
+                                  FlutterFlowTheme.of(context).secondaryText,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -112,14 +109,45 @@ class ModernDrawerUserFooter extends StatelessWidget {
                   ),
                   Icon(Icons.unfold_more_rounded,
                       size: 18,
-                      color: isDark
-                          ? const Color(0xFF6B6B6B)
-                          : const Color(0xFF8E8E93)),
+                      color: FlutterFlowTheme.of(context).secondaryText),
                 ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Gradient initials avatar — shown when no photo_url is available
+/// or when the network image fails to load.
+class _InitialsAvatar extends StatelessWidget {
+  const _InitialsAvatar({required this.initials});
+  final String initials;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Center(
+        child: Text(
+          initials,
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
       ),
     );
   }

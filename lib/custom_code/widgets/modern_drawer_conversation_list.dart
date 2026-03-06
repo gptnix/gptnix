@@ -14,9 +14,30 @@ import 'index.dart'; // Imports other custom widgets
 
 import 'package:provider/provider.dart';
 
+import 'package:google_fonts/google_fonts.dart';
+
 import 'modern_drawer_core.dart';
 import 'modern_drawer_conversation_tile.dart';
 import 'modern_drawer_ui_bits.dart';
+
+// Lightweight sealed-class hierarchy for the flat index list used by
+// ListView.builder so tiles are constructed lazily instead of all at once.
+abstract class _ListEntry {}
+
+class _SectionEntry extends _ListEntry {
+  final String label;
+  _SectionEntry(this.label);
+}
+
+class _TileEntry extends _ListEntry {
+  final ConversationItem item;
+  _TileEntry(this.item);
+}
+
+class _FooterEntry extends _ListEntry {
+  final bool showLoadMore;
+  _FooterEntry({required this.showLoadMore});
+}
 
 class ModernDrawerConversationList extends StatelessWidget {
   const ModernDrawerConversationList({
@@ -77,50 +98,91 @@ class ModernDrawerConversationList extends StatelessWidget {
 
     final grouped = modernDrawerGroupConversations(items);
 
-    final children = <Widget>[];
-
+    // Build a flat index list so ListView.builder can render lazily.
+    // Each entry is one of: _SectionEntry | _TileEntry | _FooterEntry
+    final entries = <_ListEntry>[];
     for (final g in grouped) {
-      children.add(ModernDrawerSectionHeader(label: g.label, isDark: isDark));
-
+      entries.add(_SectionEntry(g.label));
       for (final it in g.items) {
-        children.add(
-          FutureBuilder<String>(
-            future: vm.titleService.getOrGenerate(it),
-            builder: (ctx, snap) {
-              final title = (snap.data ?? it.titleFallback).trim();
-              return ModernDrawerConversationTile(
-                isDark: isDark,
-                item: it,
-                title: title.isEmpty ? it.titleFallback : title,
-                // ✅ FIX: await select
-                onSelect: () async => await onSelectConversation(it, context),
-                onDesktopContextMenu: (pos) => onDesktopContextMenu(it, pos),
-                onMobileActions: () => onMobileActions(context, it),
-              );
-            },
-          ),
-        );
+        entries.add(_TileEntry(it));
       }
     }
-
-    // original logika: pokaži "Load more" nakon 50 (bootstrap limit)
     final showLoadMore = items.length >= 50;
-    if (showLoadMore) {
-      children.add(
-        ModernDrawerLoadMoreCard(
-          isDark: isDark,
-          isLoading: vm.isLoadingOlder,
-          onTap: () => onLoadMoreOlder(),
-        ),
-      );
-    } else {
-      children.add(const SizedBox(height: 18));
-    }
+    entries.add(_FooterEntry(showLoadMore: showLoadMore));
 
-    return ListView(
+    return ListView.builder(
       controller: controller,
       padding: const EdgeInsets.only(bottom: 8),
-      children: children,
+      itemCount: entries.length,
+      itemBuilder: (ctx, i) {
+        final entry = entries[i];
+        if (entry is _SectionEntry) {
+          return ModernDrawerSectionHeader(
+              label: entry.label, isDark: isDark);
+        }
+        if (entry is _TileEntry) {
+          final it = entry.item;
+          final tile = ModernDrawerConversationTile(
+            isDark: isDark,
+            item: it,
+            title: vm.resolvedTitle(it),
+            isActive: it.ref.id == (FFAppState().activeConvRef?.id ?? ''),
+            onSelect: () async => await onSelectConversation(it, context),
+            onDesktopContextMenu: (pos) => onDesktopContextMenu(it, pos),
+            onMobileActions: () => onMobileActions(context, it),
+          );
+          return Dismissible(
+            key: Key('conv_${it.ref.id}'),
+            direction: DismissDirection.endToStart,
+            background: Container(
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 20),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.85),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.delete_outline_rounded,
+                  color: Colors.white, size: 22),
+            ),
+            confirmDismiss: (_) async {
+              final ok = await showDialog<bool>(
+                context: ctx,
+                builder: (dialogCtx) => AlertDialog(
+                  title: Text('Obriši razgovor?',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                  content: const Text(
+                      'Ovo će trajno obrisati razgovor i sve poruke.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogCtx, false),
+                      child: const Text('Otkaži'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogCtx, true),
+                      child: const Text('Obriši',
+                          style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              );
+              return ok == true;
+            },
+            onDismissed: (_) => vm.deleteConversation(it, context),
+            child: tile,
+          );
+        }
+        // _FooterEntry
+        final footer = entry as _FooterEntry;
+        if (footer.showLoadMore) {
+          return ModernDrawerLoadMoreCard(
+            isDark: isDark,
+            isLoading: vm.isLoadingOlder,
+            onTap: () => onLoadMoreOlder(),
+          );
+        }
+        return const SizedBox(height: 18);
+      },
     );
   }
 }

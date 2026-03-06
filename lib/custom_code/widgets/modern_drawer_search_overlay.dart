@@ -41,6 +41,7 @@ class ModernDrawerSearchOverlay extends StatefulWidget {
 class _ModernDrawerSearchOverlayState extends State<ModernDrawerSearchOverlay> {
   final TextEditingController ctrl = TextEditingController();
   final FocusNode focus = FocusNode();
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -50,6 +51,7 @@ class _ModernDrawerSearchOverlayState extends State<ModernDrawerSearchOverlay> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     ctrl.dispose();
     focus.dispose();
     super.dispose();
@@ -142,7 +144,13 @@ class _ModernDrawerSearchOverlayState extends State<ModernDrawerSearchOverlay> {
                               child: TextField(
                                 controller: ctrl,
                                 focusNode: focus,
-                                onChanged: (v) => vm.performSearch(v),
+                                onChanged: (v) {
+                                  _debounce?.cancel();
+                                  _debounce = Timer(
+                                    const Duration(milliseconds: 300),
+                                    () => vm.performSearch(v),
+                                  );
+                                },
                                 style: GoogleFonts.inter(
                                   fontSize: 16,
                                   color: widget.isDark

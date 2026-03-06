@@ -33,6 +33,7 @@ class ModernDrawerSearchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final hintKey =
         Theme.of(context).platform == TargetPlatform.macOS ? '⌘K' : 'Ctrl K';
+    final theme = FlutterFlowTheme.of(context);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
@@ -46,30 +47,21 @@ class ModernDrawerSearchRow extends StatelessWidget {
           },
           child: Container(
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+              color: theme.secondaryBackground,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color:
-                    isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E5E5),
-              ),
+              border: Border.all(color: theme.alternate),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             child: Row(
               children: [
-                Icon(Icons.search,
-                    size: 20,
-                    color: isDark
-                        ? const Color(0xFF6B6B6B)
-                        : const Color(0xFF8E8E93)),
+                Icon(Icons.search, size: 20, color: theme.secondaryText),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Search chats',
                     style: GoogleFonts.inter(
                       fontSize: 15,
-                      color: isDark
-                          ? const Color(0xFF8E8E93)
-                          : const Color(0xFF6B6B6B),
+                      color: theme.secondaryText,
                     ),
                   ),
                 ),
@@ -77,21 +69,16 @@ class ModernDrawerSearchRow extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF0D0D0D)
-                        : const Color(0xFFF5F5F5),
+                    color: theme.primaryBackground,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: isDark
-                            ? const Color(0xFF2A2A2A)
-                            : const Color(0xFFE5E5E5)),
+                    border: Border.all(color: theme.alternate),
                   ),
                   child: Text(
                     hintKey,
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                      color: theme.primaryText,
                     ),
                   ),
                 ),
@@ -105,9 +92,7 @@ class ModernDrawerSearchRow extends StatelessWidget {
                   icon: Icon(
                     Icons.photo_library_outlined,
                     size: 18,
-                    color: isDark
-                        ? const Color(0xFF6B6B6B)
-                        : const Color(0xFF8E8E93),
+                    color: theme.secondaryText,
                   ),
                 ),
               ],

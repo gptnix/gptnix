@@ -135,7 +135,7 @@ class _ChatWidgetState extends State<ChatWidget> {
                     height: double.infinity,
                     userId: currentUserUid,
                     userDoc: currentUserReference,
-                    isDark: false,
+                    isDark: Theme.of(context).brightness == Brightness.dark,
                   ),
                 ),
               ),

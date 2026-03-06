@@ -126,15 +126,15 @@ class GroupedConversations {
   String get label {
     switch (group) {
       case DateGroup.today:
-        return 'Today';
+        return 'Danas';
       case DateGroup.yesterday:
-        return 'Yesterday';
+        return 'Jučer';
       case DateGroup.last7Days:
-        return 'Last 7 days';
+        return 'Prošlih 7 dana';
       case DateGroup.last30Days:
-        return 'Last 30 days';
+        return 'Prošlih 30 dana';
       case DateGroup.older:
-        return 'Older';
+        return 'Starije';
     }
   }
 }
@@ -571,6 +571,15 @@ class ModernDrawerNotifier extends ChangeNotifier {
   // internal pagination anchor
   DocumentSnapshot? _lastConvSnapshot;
 
+  // Synchronous title cache — populated lazily in background after each
+  // snapshot so tiles never need a FutureBuilder.
+  final Map<String, String> _titleCache = {};
+
+  /// Returns the resolved display title for [item], falling back to
+  /// [ConversationItem.titleFallback] until the background resolve completes.
+  String resolvedTitle(ConversationItem item) =>
+      _titleCache[item.ref.id] ?? item.titleFallback;
+
   bool _bootstrapped = false;
 
   void bootstrap({int conversationsLimit = 50}) {
@@ -596,6 +605,9 @@ class ModernDrawerNotifier extends ChangeNotifier {
 
       isLoadingConversations = false;
       notifyListeners();
+
+      // Prefetch titles in background so tiles can read synchronously.
+      _prefetchTitles(merged);
     }, onError: (_) {
       isLoadingConversations = false;
       notifyListeners();
@@ -603,6 +615,29 @@ class ModernDrawerNotifier extends ChangeNotifier {
 
     // images lazy-load (da ne blokira prvi paint)
     Future.microtask(() => refreshRecentImages());
+  }
+
+  /// Resolves titles for [items] in the background and notifies once done.
+  /// Only resolves items whose title is not already cached to avoid redundant work.
+  void _prefetchTitles(List<ConversationItem> items) {
+    final unresolved = items
+        .where((it) => !_titleCache.containsKey(it.ref.id))
+        .toList();
+    if (unresolved.isEmpty) return;
+
+    Future.microtask(() async {
+      bool anyNew = false;
+      for (final item in unresolved) {
+        try {
+          final title = await titleService.getOrGenerate(item);
+          if (title.trim().isNotEmpty && title != item.titleFallback) {
+            _titleCache[item.ref.id] = title;
+            anyNew = true;
+          }
+        } catch (_) {}
+      }
+      if (anyNew) notifyListeners();
+    });
   }
 
   Future<void> refreshRecentImages({int limit = 24}) async {

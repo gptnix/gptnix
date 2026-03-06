@@ -36,7 +36,7 @@ class ModernDrawerSectionHeader extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.2,
-          color: isDark ? Colors.white70 : Colors.black54,
+          color: FlutterFlowTheme.of(context).secondaryText,
         ),
       ),
     );
@@ -59,7 +59,7 @@ class ModernDrawerEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = isDark ? Colors.white70 : Colors.black54;
+    final fg = FlutterFlowTheme.of(context).secondaryText;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
@@ -108,8 +108,7 @@ class ModernDrawerLoadMoreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = isDark ? const Color(0xFF1B1B1B) : const Color(0xFFF4F4F4);
-    final fg = isDark ? Colors.white70 : Colors.black54;
+    final theme = FlutterFlowTheme.of(context);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
@@ -119,11 +118,9 @@ class ModernDrawerLoadMoreCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: bg,
+            color: theme.secondaryBackground,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isDark ? Colors.white10 : Colors.black12,
-            ),
+            border: Border.all(color: theme.alternate),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -137,17 +134,18 @@ class ModernDrawerLoadMoreCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Text(
                   'Loading...',
-                  style: GoogleFonts.inter(fontSize: 13, color: fg),
+                  style: GoogleFonts.inter(
+                      fontSize: 13, color: theme.secondaryText),
                 ),
               ] else ...[
-                Icon(Icons.expand_more, size: 18, color: fg),
+                Icon(Icons.expand_more, size: 18, color: theme.secondaryText),
                 const SizedBox(width: 8),
                 Text(
                   'Load more',
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: fg,
+                    color: theme.secondaryText,
                   ),
                 ),
               ],
@@ -171,24 +169,21 @@ class ModernDrawerKbd extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = isDark ? Colors.white10 : Colors.black12;
-    final fg = isDark ? Colors.white70 : Colors.black87;
+    final theme = FlutterFlowTheme.of(context);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: bg,
+        color: theme.alternate.withOpacity(0.5),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isDark ? Colors.white12 : Colors.black12,
-        ),
+        border: Border.all(color: theme.alternate),
       ),
       child: Text(
         text,
         style: GoogleFonts.inter(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: fg,
+          color: theme.primaryText,
         ),
       ),
     );
