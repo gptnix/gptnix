@@ -407,7 +407,7 @@ Future maybeCreateUser(User user) async {
     createdTime: getCurrentTimestamp,
   );
 
-  await userRecord.set(userData);
+  await userRecord.set(userData, SetOptions(merge: true));
   currentUserDocument = UsersRecord.getDocumentFromData(userData, userRecord);
 }
 

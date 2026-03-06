@@ -925,6 +925,7 @@ class _GptnixSseChatState extends State<GptnixSseChat> {
             isStreaming: _isStreaming,
             deepThink: _deepThink,
             onSkipTool: _stopStreamByUser,
+            showAvatar: false,
           ),
           if (minH > 0) SizedBox(height: minH),
         ],

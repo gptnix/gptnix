@@ -76,6 +76,7 @@ class GptnixAssistantMessageTile extends StatelessWidget {
             isTyping: false,
             stableId: stableId,
             isDark: isDark,
+            showAvatar: false,
           ),
           const SizedBox(height: 10),
           GptnixMessageActionRow(

@@ -47,14 +47,38 @@ DocumentReference? get currentUserReference =>
     loggedIn ? UsersRecord.collection.doc(currentUser!.uid) : null;
 
 UsersRecord? currentUserDocument;
+
+Stream<UsersRecord?> _userDocumentWithRetry(String uid) async* {
+  final docRef = UsersRecord.collection.doc(uid);
+  const maxAttempts = 6;
+  const delays = [0, 200, 400, 800, 1500, 3000];
+
+  for (int i = 0; i < maxAttempts; i++) {
+    if (i > 0) await Future.delayed(Duration(milliseconds: delays[i]));
+    try {
+      final snap = await docRef.get();
+      if (snap.exists) {
+        yield* UsersRecord.getDocument(docRef).handleError((e) {
+          debugPrint('[auth] user doc stream error: $e');
+        });
+        return;
+      }
+      debugPrint('[auth] user doc not ready, attempt ${i + 1}/$maxAttempts');
+    } catch (e) {
+      debugPrint('[auth] user doc fetch error attempt ${i + 1}: $e');
+    }
+  }
+  debugPrint('[auth] ⚠️ user doc never appeared for uid=$uid, unblocking');
+  yield null;
+}
+
 final authenticatedUserStream = FirebaseAuth.instance
     .authStateChanges()
     .map<String>((user) => user?.uid ?? '')
     .switchMap(
       (uid) => uid.isEmpty
-          ? Stream.value(null)
-          : UsersRecord.getDocument(UsersRecord.collection.doc(uid))
-              .handleError((_) {}),
+          ? Stream<UsersRecord?>.value(null)
+          : _userDocumentWithRetry(uid),
     )
     .map((user) {
   currentUserDocument = user;
